@@ -2,10 +2,11 @@
 <html>
 <head>
     <meta charset='utf-8' />
-    <title>Animate a line</title>
+    <title>Animate a point along a route</title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
     <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.51.0/mapbox-gl.js'></script>
     <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.51.0/mapbox-gl.css' rel='stylesheet' />
+    <script src="./okay.geojson" type="text/javascript"></script>
     <style>
         body { margin:0; padding:0; }
         #map { position:absolute; top:0; bottom:0; width:100%; }
@@ -14,137 +15,161 @@
 <body>
 
 <style>
-button {
+.overlay {
     position: absolute;
-    margin: 20px;
+    top: 10px;
+    left: 10px;
 }
 
-#pause::after {
-    content: 'Pause';
+.overlay button {
+    font:600 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    background-color: #3386c0;
+    color: #fff;
+    display: inline-block;
+    margin: 0;
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer;
+    border-radius: 3px;
 }
 
-#pause.pause::after {
-    content: 'Play';
+.overlay button:hover {
+    background-color:#4ea0da;
 }
 </style>
+<script src='https://api.tiles.mapbox.com/mapbox.js/plugins/turf/v2.0.0/turf.min.js' charset='utf-8'></script>
+
 <div id='map'></div>
-<button id='pause'></button>
+<div class='overlay'>
+    <button id='replay'>Replay</button>
+</div>
+
 <script>
 mapboxgl.accessToken = 'pk.eyJ1IjoiZGViYm9pdXRyIiwiYSI6IjhlMTk5YzlhZDBiODQ5MWE5NDEzMzE1MjI0OTU4OWJjIn0.jS8URjY-9OvjAv6aTn9I0w';
 var map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/streets-v10',
-    center: [0, 0],
-    zoom: 0.5
+    style: 'mapbox://styles/mapbox/streets-v9',
+    center: [-96, 37.8],
+    zoom: 3
 });
 
-// Create a GeoJSON source with an empty lineString.
-var geojson = {
+// A single point that animates along the route.
+// Coordinates are initially set to origin.
+var point = {
     "type": "FeatureCollection",
     "features": [{
         "type": "Feature",
+        "properties": {},
         "geometry": {
-            "type": "LineString",
-            "coordinates": [
-                [0, 0]
-            ]
+            "type": "Point",
+            "coordinates": route.features[0].geometry.coordinates[0]
         }
     }]
 };
 
-var speedFactor = 30; // number of frames per longitude degree
-var animation; // to store and cancel the animation
-var startTime = 0;
-var progress = 0; // progress = timestamp - startTime
-var resetTime = false; // indicator of whether time reset is needed for the animation
-var pauseButton = document.getElementById('pause');
+// Calculate the distance in kilometers between route start/end point.
+var lineDistance = turf.lineDistance(route.features[0], 'kilometers');
+console.log(lineDistance);
+var arc = [];
 
-map.on('load', function() {
+// Number of steps to use in the arc and animation, more steps means
+// a smoother arc and animation, but too many steps will result in a
+// low frame rate
+var steps = 1000;
 
-  var url = './full_route.geojson';
-  map.addSource('route', { type: 'geojson', data: url});
+// Draw an arc between the `origin` & `destination` of the two points
+for (var i = 0; i < lineDistance; i += lineDistance / steps) {
+    var segment = turf.along(route.features[0], i, 'kilometers');
+    arc.push(segment.geometry.coordinates);
+}
 
-  map.addLayer({
-      "id": "route",
-      "type": "line",
-      "source": "route",
-      'layout': {
-          'line-cap': 'round',
-          'line-join': 'round'
-      },
-      'paint': {
-          'line-color': '#ed6498',
-          'line-width': 5,
-          'line-opacity': .8
-      }
-  });
+// Update the route with calculated arc coordinates
+route.features[0].geometry.coordinates = arc;
 
-    // add the line which will be modified in the animation
+// Used to increment the value of the point measurement against the route.
+var counter = 0;
+
+var url = './ride.geojson';
+// console.log(full_route);
+map.on('load', function () {
+    // Add a source and layer displaying a point which will be animated in a circle.
+    // map.addSource('route', {
+    //     "type": "geojson",
+    //     "data": url
+    // });
+
     map.addLayer({
-        'id': 'line-animation',
-        'type': 'line',
-        'source': {
-            'type': 'geojson',
-            'data': geojson
+        "id": "route",
+        "source": {
+          "type":"geojson",
+          "data": route
         },
-        'layout': {
-            'line-cap': 'round',
-            'line-join': 'round'
-        },
-        'paint': {
-            'line-color': '#ed6498',
-            'line-width': 5,
-            'line-opacity': .8
+        "type": "line",
+        "paint": {
+            "line-width": 3,
+            "line-color": "#007cbf"
         }
     });
 
-    startTime = performance.now();
+    map.addSource('point', {
+        "type": "geojson",
+        "data": point
+    });
 
-    animateLine();
-
-    // click the button to pause or play
-    pauseButton.addEventListener('click', function() {
-        pauseButton.classList.toggle('pause');
-        if (pauseButton.classList.contains('pause')) {
-            cancelAnimationFrame(animation);
-        } else {
-            resetTime = true;
-            animateLine();
+    map.addLayer({
+        "id": "point",
+        "source": "point",
+        "type": "symbol",
+        "layout": {
+            "icon-image": "bicycle-share-15",
+            // "icon-rotate": ["get", "bearing"],
+            "icon-keep-upright": true,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true
         }
     });
 
-    // reset startTime and progress once the tab loses or gains focus
-    // requestAnimationFrame also pauses on hidden tabs by default
-    document.addEventListener('visibilitychange', function() {
-        resetTime = true;
-    });
+    function animate() {
+        // Update point geometry to a new position based on counter denoting
+        // the index to access the arc.
+        point.features[0].geometry.coordinates = route.features[0].geometry.coordinates[counter];
 
-    // animated in a circle as a sine wave along the map.
-    function animateLine(timestamp) {
-        if (resetTime) {
-            // resume previous progress
-            startTime = performance.now() - progress;
-            resetTime = false;
-        } else {
-            progress = timestamp - startTime;
+        // Calculate the bearing to ensure the icon is rotated to match the route arc
+        // The bearing is calculate between the current point and the next point, except
+        // at the end of the arc use the previous point and the current point
+
+        // point.features[0].properties.bearing = turf.bearing(
+        //     turf.point(route.features[0].geometry.coordinates[counter >= steps ? counter - 1 : counter]),
+        //     turf.point(route.features[0].geometry.coordinates[counter >= steps ? counter : counter + 1])
+        // );
+
+        // Update the source with this new data.
+        map.getSource('point').setData(point);
+
+        // Request the next frame of animation so long the end has not been reached.
+        if (counter < steps) {
+            requestAnimationFrame(animate);
         }
 
-        // restart if it finishes a loop
-        if (progress > speedFactor * 360) {
-            startTime = timestamp;
-            geojson.features[0].geometry.coordinates = [];
-        } else {
-            var x = progress / speedFactor;
-            // draw a sine wave with some math.
-            var y = Math.sin(x * Math.PI / 90) * 40;
-            // append new coordinates to the lineString
-            geojson.features[0].geometry.coordinates.push([x, y]);
-            // then update the map
-            map.getSource('line-animation').setData(geojson);
-        }
-        // Request the next frame of the animation.
-        animation = requestAnimationFrame(animateLine);
+        counter = counter + 1;
     }
+
+    document.getElementById('replay').addEventListener('click', function() {
+        // Set the coordinates of the original point back to origin
+        point.features[0].geometry.coordinates = origin;
+
+        // Update the source layer
+        map.getSource('point').setData(point);
+
+        // Reset the counter
+        counter = 0;
+
+        // Restart the animation.
+        animate(counter);
+    });
+
+    // Start the animation.
+    animate(counter);
 });
 </script>
 
