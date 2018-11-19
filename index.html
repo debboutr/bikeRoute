@@ -2,11 +2,11 @@
 <html>
 <head>
     <meta charset='utf-8' />
-    <title>Animate a point along a route</title>
+    <title>Bike Across America</title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
     <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.51.0/mapbox-gl.js'></script>
     <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.51.0/mapbox-gl.css' rel='stylesheet' />
-    <script src="./okay.geojson" type="text/javascript"></script>
+    <script src="./full_route.geojson" type="text/javascript"></script>
     <style>
         body { margin:0; padding:0; }
         #map { position:absolute; top:0; bottom:0; width:100%; }
@@ -17,8 +17,15 @@
 <style>
 .overlay {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    top: 74%;
+    left: 44%;
+}
+.header {
+  background-color: #696969;
+  padding: 10px 10px;
+  font:600 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+  border-radius: 3px;
+  /* opacity:.47; */
 }
 
 .overlay button {
@@ -27,7 +34,7 @@
     color: #fff;
     display: inline-block;
     margin: 0;
-    padding: 10px 20px;
+    padding: 5px 10px;
     border: none;
     cursor: pointer;
     border-radius: 3px;
@@ -41,7 +48,10 @@
 
 <div id='map'></div>
 <div class='overlay'>
-    <button id='replay'>Replay</button>
+    <div class="header">
+
+      <button id='replay'><h1>Bike Across America!!!</h1></button>
+    </div>
 </div>
 
 <script>
@@ -49,12 +59,11 @@ mapboxgl.accessToken = 'pk.eyJ1IjoiZGViYm9pdXRyIiwiYSI6IjhlMTk5YzlhZDBiODQ5MWE5N
 var map = new mapboxgl.Map({
     container: 'map',
     style: 'mapbox://styles/mapbox/streets-v9',
-    center: [-96, 37.8],
-    zoom: 3
+    center: [-97, 42],
+    zoom: 4
 });
 
 // A single point that animates along the route.
-// Coordinates are initially set to origin.
 var point = {
     "type": "FeatureCollection",
     "features": [{
@@ -89,14 +98,10 @@ route.features[0].geometry.coordinates = arc;
 // Used to increment the value of the point measurement against the route.
 var counter = 0;
 
-var url = './ride.geojson';
-// console.log(full_route);
+var start = route.features[0].geometry.coordinates[0]
+var finish = route.features[0].geometry.coordinates[route.features[0].geometry.coordinates.length -1]
+console.log(finish);
 map.on('load', function () {
-    // Add a source and layer displaying a point which will be animated in a circle.
-    // map.addSource('route', {
-    //     "type": "geojson",
-    //     "data": url
-    // });
 
     map.addLayer({
         "id": "route",
@@ -117,15 +122,68 @@ map.on('load', function () {
     });
 
     map.addLayer({
+      "id": "circle",
+      "type": "circle",
+      "source": "point",
+      "paint": {
+        "circle-color": "#32CD32",
+        "circle-radius": 33,
+        "circle-stroke-width": 1,
+        "circle-stroke-color": "#fff",
+        'circle-opacity': 0.47,
+     },
+    });
+
+    map.addLayer({
         "id": "point",
         "source": "point",
         "type": "symbol",
         "layout": {
             "icon-image": "bicycle-share-15",
             // "icon-rotate": ["get", "bearing"],
+            "icon-size": 1.5,
             "icon-keep-upright": true,
             "icon-allow-overlap": true,
             "icon-ignore-placement": true
+        }
+    });
+
+    map.addLayer({
+        "id": "points",
+        "type": "symbol",
+        "source": {
+            "type": "geojson",
+            "data": {
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": start
+                    },
+                    "properties": {
+                        "title": "Bandon, OR",
+                        "icon": "star-stroked"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": finish
+                    },
+                    "properties": {
+                        "title": "New York, NY",
+                        "icon": "star-stroked"
+                    }
+                }]
+            }
+        },
+        "layout": {
+            "icon-image": "star-15",
+            "text-field": "{title}",
+            "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+            "text-offset": [0, 0.6],
+            "text-anchor": "top"
         }
     });
 
@@ -149,6 +207,9 @@ map.on('load', function () {
         // Request the next frame of animation so long the end has not been reached.
         if (counter < steps) {
             requestAnimationFrame(animate);
+        }
+        if (counter === steps){
+          console.log('yay');
         }
 
         counter = counter + 1;
